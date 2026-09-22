@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Happy Birthday Jen!</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #ffe6ea;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #333;
+        }
+
+        #confetti-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 9999;
+        }
+
+        .scene {
+            display: none;
+            text-align: center;
+            width: 90%;
+            max-width: 600px;
+            background: white;
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            position: relative;
+            z-index: 10;
+        }
+
+        .scene.active {
+            display: block;
+            animation: fadeIn 1s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Cake & Candle CSS */
+        .cake {
+            font-size: 80px;
+            margin: 20px 0;
+            position: relative;
+        }
+        
+        .candle-flame {
+            font-size: 40px;
+            position: absolute;
+            top: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            transition: opacity 0.3s;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        button {
+            background-color: #ff718d;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-top: 15px;
+        }
+
+        button:hover {
+            background-color: #ff4b6b;
+        }
+
+        /* Photo Reel CSS */
+        .reel-container {
+            width: 100%;
+            overflow: hidden;
+            margin-top: 20px;
+            border-radius: 12px;
+            background: #f0f0f0;
+            padding: 10px 0;
+        }
+
+        .reel-track {
+            display: flex;
+            gap: 15px;
+            padding: 0 15px;
+            overflow-x: auto;
+            scroll-behavior: smooth;
+        }
+
+        .reel-slide {
+            flex: 0 0 150px;
+            height: 150px;
+            background: #ddd;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .letter {
+            text-align: left;
+            line-height: 1.6;
+            font-size: 1.1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="confetti-canvas"></canvas>
+
+    <!-- SCENE 1: THE CAKE -->
+    <div id="scene1" class="scene active">
+        <h2>Blow out the candle! 🎂</h2>
+        <div class="cake">
+            <span class="candle-flame" id="flame">🔥</span>
+            🍰
+        </div>
+        <p id="mic-status">Click the button below to enable the microphone, then blow on your phone/computer!</p>
+        <button id="start-mic-btn">Enable Mic to Blow</button>
+        <button id="cakeNext" class="hidden">Read Your Letter</button>
+    </div>
+
+    <!-- SCENE 2: THE LETTER & REEL -->
+    <div id="scene2" class="scene">
+        <div class="letter">
+            <h3>baho, hapi bidet!</h3>
+            <p>I hope you have the best birthday ever. Here is a little trip down memory lane. (Add the rest of your heartfelt message here!)</p>
+        </div>
+        
+        <div class="reel-container">
+            <div class="reel-track" id="reelTrack">
+                <!-- Images will be injected here by JS -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. SETUP VARIABLES ---
+        const startMicBtn = document.getElementById('start-mic-btn');
+        const cakeNextBtn = document.getElementById('cakeNext');
+        const flame = document.getElementById('flame');
+        const micStatus = document.getElementById('mic-status');
+        let audioContext;
+        let analyser;
+        let microphone;
+
+        // Replace these URLs with real image links (imgur, etc.) or base64 strings
+        const photos = [
+            "https://via.placeholder.com/150/ff718d/ffffff?text=Pic+1",
+            "https://via.placeholder.com/150/fdff6a/333333?text=Pic+2",
+            "https://via.placeholder.com/150/7afcff/333333?text=Pic+3",
+            "https://via.placeholder.com/150/59ff73/333333?text=Pic+4"
+        ];
+
+        // --- 2. MICROPHONE & BLOWING LOGIC ---
+        startMicBtn.addEventListener('click', async () => {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                microphone = audioContext.createMediaStreamSource(stream);
+                
+                microphone.connect(analyser);
+                analyser.fftSize = 256;
+                
+                startMicBtn.classList.add('hidden');
+                micStatus.innerText = "Listening... Blow into the mic!";
+                
+                detectBlow();
+            } catch (err) {
+                micStatus.innerText = "Mic access denied. Just click here to pretend you blew it!";
+                startMicBtn.innerText = "Poof! 💨";
+                startMicBtn.onclick = extinguishAll;
+            }
+        });
+
+        function detectBlow() {
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            function checkVolume() {
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < bufferLength; i++) {
+                    sum += dataArray[i];
+                }
+                let averageVolume = sum / bufferLength;
+
+                // Threshold for "blowing" (adjust between 50-100 if it's too sensitive/insensitive)
+                if (averageVolume > 70) {
+                    extinguishAll();
+                } else if (!flame.classList.contains('hidden')) {
+                    requestAnimationFrame(checkVolume);
+                }
+            }
+            checkVolume();
+        }
+
+        function extinguishAll() {
+            flame.classList.add('hidden');
+            micStatus.innerText = "Yay! Make a wish!";
+            burstConfetti();
+            
+            setTimeout(() => {
+                cakeNextBtn.classList.remove('hidden');
+            }, 1500); // Show next button after 1.5 seconds
+        }
+
+        // --- 3. CONFETTI LOGIC ---
+        const confettiCanvas = document.getElementById('confetti-canvas');
+        const ctx = confettiCanvas.getContext('2d');
+        confettiCanvas.width = window.innerWidth;
+        confettiCanvas.height = window.innerHeight;
+        let particles = [];
+
+        function burstConfetti() {
+            const colors = ['#ff718d', '#fdff6a', '#7afcff', '#59ff73', '#ff8e47'];
+            for (let i = 0; i < 150; i++) {
+                particles.push({
+                    x: confettiCanvas.width / 2,
+                    y: confettiCanvas.height / 2 + 50,
+                    r: Math.random() * 6 + 2,
+                    dx: Math.random() * 12 - 6,
+                    dy: Math.random() * -15 - 5,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    tilt: Math.floor(Math.random() * 10) - 10,
+                    tiltAngleInc: (Math.random() * 0.07) + 0.05,
+                    tiltAngle: 0
+                });
+            }
+            animateConfetti();
+        }
+
+        function animateConfetti() {
+            requestAnimationFrame(animateConfetti);
+            ctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+            particles.forEach((p, index) => {
+                p.tiltAngle += p.tiltAngleInc;
+                p.dy += 0.2; 
+                p.y += p.dy;
+                p.x += Math.sin(p.tiltAngle) * 2 + p.dx; 
+                
+                ctx.beginPath();
+                ctx.lineWidth = p.r;
+                ctx.strokeStyle = p.color;
+                ctx.moveTo(p.x + p.tilt + p.r, p.y);
+                ctx.lineTo(p.x + p.tilt, p.y + p.tilt + p.r);
+                ctx.stroke();
+                
+                if (p.y > confettiCanvas.height) particles.splice(index, 1);
+            });
+        }
+
+        // --- 4. SCENE TRANSITION & REEL POPULATION ---
+        cakeNextBtn.addEventListener('click', () => {
+            document.getElementById('scene1').classList.remove('active');
+            document.getElementById('scene2').classList.add('active');
+            populatePhotoReel();
+        });
+
+        function populatePhotoReel() {
+            const track = document.getElementById('reelTrack');
+            track.innerHTML = ''; 
+            photos.forEach(photoSrc => {
+                const slide = document.createElement('div');
+                slide.className = 'reel-slide';
+                const img = document.createElement('img');
+                img.src = photoSrc;
+                img.style.width = '100%';
+                img.style.height = '100%';
+                img.style.objectFit = 'cover'; 
+                slide.appendChild(img);
+                track.appendChild(slide);
+            });
+        }
+    </script>
+</body>
+</html>
